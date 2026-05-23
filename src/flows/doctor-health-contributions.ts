@@ -164,6 +164,8 @@ async function runAuthProfileHealth(ctx: DoctorHealthFlowContext): Promise<void>
 async function runGatewayAuthHealth(ctx: DoctorHealthFlowContext): Promise<void> {
   const { resolveSecretInputRef } = await import("../config/types.secrets.js");
   const { resolveGatewayAuth } = await import("../gateway/auth.js");
+  const { resolveDoctorGatewayTokenSecretRef } =
+    await import("./doctor-gateway-auth-secret-ref.js");
   const { note } = await import("../terminal/note.js");
   const { randomToken } = await import("../commands/onboard-helpers.js");
   if (resolveDoctorMode(ctx.cfg) !== "local" || !ctx.sourceConfigValid) {
@@ -173,10 +175,23 @@ async function runGatewayAuthHealth(ctx: DoctorHealthFlowContext): Promise<void>
     value: ctx.cfg.gateway?.auth?.token,
     defaults: ctx.cfg.secrets?.defaults,
   }).ref;
-  const auth = resolveGatewayAuth({
+  let auth = resolveGatewayAuth({
     authConfig: ctx.cfg.gateway?.auth,
     tailscaleMode: ctx.cfg.gateway?.tailscale?.mode ?? "off",
   });
+  if (gatewayTokenRef && !auth.token) {
+    const resolvedToken = await resolveDoctorGatewayTokenSecretRef({
+      cfg: ctx.cfg,
+      auth,
+      env: ctx.env ?? process.env,
+    });
+    if (resolvedToken) {
+      auth = {
+        ...auth,
+        token: resolvedToken,
+      };
+    }
+  }
   // Modes that don't need a token: password, none, trusted-proxy.
   // This aligns with hasExplicitGatewayInstallAuthMode() in auth-install-policy.ts.
   // Previously, only "password" and "token" (with a token present) were excluded,

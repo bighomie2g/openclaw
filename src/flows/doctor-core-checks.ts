@@ -12,6 +12,7 @@ import type { ConfigValidationIssue, OpenClawConfig } from "../config/types.open
 import { resolveSecretInputRef } from "../config/types.secrets.js";
 import { hasAmbiguousGatewayAuthModeConfig } from "../gateway/auth-mode-policy.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
+import { resolveDoctorGatewayTokenSecretRef } from "./doctor-gateway-auth-secret-ref.js";
 import { registerHealthCheck } from "./health-check-registry.js";
 import type { HealthCheck, HealthFinding } from "./health-checks.js";
 
@@ -144,10 +145,19 @@ const gatewayAuthCheck: HealthCheck = {
       value: ctx.cfg.gateway?.auth?.token,
       defaults: ctx.cfg.secrets?.defaults,
     }).ref;
-    const auth = resolveGatewayAuth({
+    let auth = resolveGatewayAuth({
       authConfig: ctx.cfg.gateway?.auth,
       tailscaleMode: ctx.cfg.gateway?.tailscale?.mode ?? "off",
     });
+    if (gatewayTokenRef && !auth.token) {
+      const resolvedToken = await resolveDoctorGatewayTokenSecretRef({ cfg: ctx.cfg, auth });
+      if (resolvedToken) {
+        auth = {
+          ...auth,
+          token: resolvedToken,
+        };
+      }
+    }
     const needsToken =
       auth.mode !== "password" &&
       auth.mode !== "none" &&

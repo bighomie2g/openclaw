@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SkillStatusEntry } from "../agents/skills-status.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -314,5 +317,52 @@ describe("registerCoreHealthChecks", () => {
         message: "Memory system not found in workspace.",
       }),
     );
+  });
+
+  it("does not warn when local gateway token SecretRef resolves", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-doctor-gateway-auth-"));
+    const secretsPath = path.join(tempDir, "secrets.json");
+    await fs.writeFile(
+      secretsPath,
+      `${JSON.stringify({ gateway: { auth: { token: "resolved-gateway-token" } } })}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    try {
+      const cfg: OpenClawConfig = {
+        gateway: {
+          mode: "local",
+          auth: {
+            mode: "token",
+            token: {
+              source: "file",
+              provider: "filemain",
+              id: "/gateway/auth/token",
+            },
+          },
+        },
+        secrets: {
+          providers: {
+            filemain: {
+              source: "file",
+              path: secretsPath,
+              mode: "json",
+              allowInsecurePath: true,
+            },
+          },
+        },
+      } as OpenClawConfig;
+      const check = getCheck(createCoreHealthChecks(createDeps()), "core/doctor/gateway-auth");
+
+      await expect(
+        check.detect({
+          mode: "lint",
+          runtime,
+          cfg,
+          cwd: tempDir,
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

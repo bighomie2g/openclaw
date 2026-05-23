@@ -1,4 +1,7 @@
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DoctorPrompter } from "../commands/doctor-prompter.js";
 import {
@@ -17,7 +20,13 @@ const mocks = vi.hoisted(() => ({
     issues: [],
   }),
   applyWizardMetadata: vi.fn((cfg: unknown) => cfg),
+  randomToken: vi.fn(() => "generated-token"),
   logConfigUpdated: vi.fn(),
+  isRecord: vi.fn(
+    (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value),
+  ),
+  resolveUserPath: vi.fn((p: string) => p),
   shortenHomePath: vi.fn((p: string) => p),
   formatCliCommand: vi.fn((cmd: string) => cmd),
 }));
@@ -42,6 +51,7 @@ vi.mock("../config/config.js", () => ({
 
 vi.mock("../commands/onboard-helpers.js", () => ({
   applyWizardMetadata: mocks.applyWizardMetadata,
+  randomToken: mocks.randomToken,
 }));
 
 vi.mock("../config/logging.js", () => ({
@@ -49,6 +59,8 @@ vi.mock("../config/logging.js", () => ({
 }));
 
 vi.mock("../utils.js", () => ({
+  isRecord: mocks.isRecord,
+  resolveUserPath: mocks.resolveUserPath,
   shortenHomePath: mocks.shortenHomePath,
 }));
 
@@ -208,6 +220,58 @@ describe("doctor health contributions", () => {
     expect(ids.indexOf("doctor:structured-health-repairs")).toBeLessThan(
       ids.indexOf("doctor:write-config"),
     );
+  });
+
+  it("does not warn in plain doctor when local gateway token SecretRef resolves", async () => {
+    const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "openclaw-doctor-gateway-auth-"));
+    const secretsPath = path.join(tempDir, "secrets.json");
+    await fsp.writeFile(
+      secretsPath,
+      `${JSON.stringify({ gateway: { auth: { token: "resolved-gateway-token" } } })}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    try {
+      const contribution = requireDoctorContribution("doctor:gateway-auth");
+      const ctx = {
+        cfg: {
+          gateway: {
+            mode: "local",
+            auth: {
+              mode: "token",
+              token: {
+                source: "file",
+                provider: "filemain",
+                id: "/gateway/auth/token",
+              },
+            },
+          },
+          secrets: {
+            providers: {
+              filemain: {
+                source: "file",
+                path: secretsPath,
+                mode: "json",
+                allowInsecurePath: true,
+              },
+            },
+          },
+        },
+        configResult: { cfg: {} },
+        sourceConfigValid: true,
+        prompter: buildDoctorPrompter(false),
+        runtime: { log: vi.fn(), error: vi.fn(), exit: vi.fn() },
+        options: { nonInteractive: true },
+        cfgForPersistence: {},
+        configPath: "/tmp/fake-openclaw.json",
+        env: {},
+      } as Parameters<(typeof contribution)["run"]>[0];
+
+      await contribution.run(ctx);
+
+      expect(mocks.note).not.toHaveBeenCalled();
+    } finally {
+      await fsp.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("skips doctor config writes under legacy update parents", () => {
