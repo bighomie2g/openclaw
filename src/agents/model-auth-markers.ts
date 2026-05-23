@@ -6,6 +6,7 @@ import { listKnownProviderEnvApiKeyNames } from "./model-auth-env-vars.js";
 export const MINIMAX_OAUTH_MARKER = "minimax-oauth";
 export const OAUTH_API_KEY_MARKER_PREFIX = "oauth:";
 export const OLLAMA_LOCAL_AUTH_MARKER = "ollama-local";
+export const CODEX_APP_SERVER_AUTH_MARKER = "codex-app-server";
 /** @deprecated Bundled local-provider marker; do not use from third-party plugins. */
 export const CUSTOM_LOCAL_AUTH_MARKER = "custom-local";
 export const GCP_VERTEX_CREDENTIALS_MARKER = "gcp-vertex-credentials";
@@ -20,6 +21,7 @@ const AWS_SDK_ENV_MARKERS = new Set([
 const CORE_NON_SECRET_API_KEY_MARKERS = [
   CUSTOM_LOCAL_AUTH_MARKER,
   OLLAMA_LOCAL_AUTH_MARKER,
+  CODEX_APP_SERVER_AUTH_MARKER,
   NON_ENV_SECRETREF_MARKER,
 ] as const;
 let knownEnvApiKeyMarkersCache: Set<string> | undefined;

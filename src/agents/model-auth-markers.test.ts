@@ -82,6 +82,21 @@ describe("model auth markers", () => {
     expect(markers.has("ollama-local")).toBe(true);
   });
 
+  it("recognizes Codex app-server marker without plugin manifest metadata", async () => {
+    vi.resetModules();
+    vi.doMock("../plugins/manifest-metadata-scan.js", () => ({
+      listOpenClawPluginManifestMetadata: () => [],
+    }));
+    try {
+      const markersModule = await import("./model-auth-markers.js");
+      expect(markersModule.listKnownNonSecretApiKeyMarkers()).toContain("codex-app-server");
+      expect(markersModule.isNonSecretApiKeyMarker("codex-app-server")).toBe(true);
+    } finally {
+      vi.doUnmock("../plugins/manifest-metadata-scan.js");
+      await loadMarkerModules();
+    }
+  });
+
   it("does not treat removed provider markers as active auth markers", () => {
     expect(isNonSecretApiKeyMarker("qwen-oauth")).toBe(false);
   });
